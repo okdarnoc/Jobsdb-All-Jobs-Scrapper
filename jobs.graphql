@@ -1,0 +1,25 @@
+query getJobs{
+    jobs(page: 1, locale: "en"){
+        total
+        jobs {
+            id
+            companyMeta {
+                name
+            }
+            jobTitle
+            jobUrl
+            employmentTypes {
+                name
+            }
+            categories {
+                name
+            }
+            careerLevelName
+            qualificationName
+            industry {
+                name
+            }
+            workExperienceName
+        }
+    }
+}

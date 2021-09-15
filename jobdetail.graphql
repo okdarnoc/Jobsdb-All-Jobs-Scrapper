@@ -1,0 +1,9 @@
+query getJobDetail {
+    jobDetail(jobId: "100003008475147", locale: "en", country: "hk") {
+        jobDetail {
+            jobRequirement {
+                benefits
+            }
+        }
+    }
+}

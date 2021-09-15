@@ -1,6 +1,3 @@
-# Jobsdb-All-Jobs-Scrapper
-It scrap all jobs on jobsdb.com
-
 # Scraper for hk.jobsdb.com
 
 The scraper uses python with the scrapy library.
