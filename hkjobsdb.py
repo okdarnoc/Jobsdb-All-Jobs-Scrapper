@@ -2,12 +2,13 @@ import json
 import math
 
 import scrapy
-
+import time
 
 class HkJobsDbSpider(scrapy.Spider):
     name = 'hkjobsdb'
     total_pages = None
     job_per_page = 30
+    handle_httpstatus_list = [400, 403, 404, 500] 
 
     def start_requests(self):
         """
@@ -29,6 +30,10 @@ class HkJobsDbSpider(scrapy.Spider):
                              })
 
     def parse(self, response, **kwargs):
+
+        if response.status in self.handle_httpstatus_list:
+            self.handle_error(response)
+            return
         """
         This function parses each page of the search result.
         When parsing the first page, it also gets the total jobs and calculates the last page.
@@ -90,8 +95,10 @@ class HkJobsDbSpider(scrapy.Spider):
                                      "page": page
                                  })
 
-    @staticmethod
-    def parse_detail(response):
+    def parse_detail(self, response):
+        if response.status in self.handle_httpstatus_list:
+            self.handle_error(response)
+            return
         """
         This function parses the response from the job detail API request's response.
         We only need the benefits from here.
@@ -101,3 +108,29 @@ class HkJobsDbSpider(scrapy.Spider):
         job = dr.get("data").get("jobDetail")
         item["benefits"] = ", ".join(job.get("jobDetail").get("jobRequirement").get("benefits"))
         yield item
+
+    def handle_error(self, response):
+        """
+        Handle failed requests and store the response in a different file.
+        """
+        self.logger.error(f"Request failed with status {response.status} for URL: {response.request.url}")
+
+        error_data = {
+            'url': response.request.url,  
+            'status': response.status,
+            'body': response.text
+        }
+        file_name = 'failed_requests.json'
+        with open(file_name, 'a') as file:
+            file.write(json.dumps(error_data) + "\n")
+
+        retry_times = response.meta.get('retry_times', 0) + 1
+        if retry_times <= 2:
+            self.logger.error(f"Retrying URL: {response.request.url} (attempt {retry_times})")
+            retry_req = response.request.copy()
+            retry_req.dont_filter = True 
+            retry_req.meta['retry_times'] = retry_times
+            retry_req.callback = response.request.callback
+            yield retry_req
+        else:
+            self.logger.error(f"Giving up on URL: {response.request.url} after {retry_times} attempts")

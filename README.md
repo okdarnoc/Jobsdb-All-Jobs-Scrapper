@@ -4,7 +4,7 @@ The scraper uses python with the scrapy library.
 
 ## Installation
 ```sh
-pip insall scrapy
+pip install scrapy
 ```
 
 # Usage
