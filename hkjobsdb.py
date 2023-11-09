@@ -1,8 +1,6 @@
 import json
 import math
-
 import scrapy
-import time
 
 class HkJobsDbSpider(scrapy.Spider):
     name = 'hkjobsdb'
@@ -27,7 +25,9 @@ class HkJobsDbSpider(scrapy.Spider):
                              }),
                              headers={
                                  'content-type': 'application/json',
-                             })
+                             },
+                            errback=self.handle_error
+                            )
 
     def parse(self, response, **kwargs):
 
@@ -121,8 +121,12 @@ class HkJobsDbSpider(scrapy.Spider):
             'body': response.text
         }
         file_name = 'failed_requests.json'
-        with open(file_name, 'a') as file:
-            file.write(json.dumps(error_data) + "\n")
+        try:
+            with open(file_name, 'a') as file:
+                file.write(json.dumps(error_data) + "\n")
+                file.flush()  # Ensure data is written to the file
+        except Exception as e:
+            self.logger.error(f"Failed to write to {file_name}: {e}")
 
         retry_times = response.meta.get('retry_times', 0) + 1
         if retry_times <= 2:
