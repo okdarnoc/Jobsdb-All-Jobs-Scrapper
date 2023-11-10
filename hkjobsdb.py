@@ -136,13 +136,8 @@ class HkJobsDbSpider(scrapy.Spider):
             'body': response.text
         }
         file_name = 'failed_requests.json'
-        try:
-            with open(file_name, 'a') as file:
-                file.write(json.dumps(error_data) + "\n")
-                file.flush()  
-        except Exception as e:
-            self.logger.error(f"Failed to write to {file_name}: {e}")
-        #self.retry(response)
+        
+        self.retry(response)
 
     def retry(self, failure):
         """
@@ -158,3 +153,9 @@ class HkJobsDbSpider(scrapy.Spider):
             self.crawler.engine.schedule(retry_req, self)
         else:
             self.logger.error(f"Giving up on URL: {failure.request.url} after {retry_times} attempts")
+            try:
+                with open(file_name, 'a') as file:
+                    file.write(json.dumps(error_data) + "\n")
+                    file.flush()  
+            except Exception as e:
+                self.logger.error(f"Failed to write to {file_name}: {e}")
