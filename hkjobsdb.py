@@ -1,13 +1,22 @@
 import json
 import math
-
 import scrapy
-
+from scrapy.downloadermiddlewares.retry import RetryMiddleware
+from scrapy.utils.response import response_status_message
 
 class HkJobsDbSpider(scrapy.Spider):
     name = 'hkjobsdb'
     total_pages = None
     job_per_page = 30
+    handle_httpstatus_list = [400, 403, 404, 500]
+    max_retries = 5
+    retry_delay = 0.133
+
+    custom_settings = {
+        'RETRY_TIMES': max_retries,
+        'RETRY_HTTP_CODES': handle_httpstatus_list,
+        'DOWNLOAD_DELAY': retry_delay
+    }
 
     def start_requests(self):
         """
@@ -26,7 +35,10 @@ class HkJobsDbSpider(scrapy.Spider):
                              }),
                              headers={
                                  'content-type': 'application/json',
-                             })
+                             },
+                             callback=self.parse, 
+                             errback=self.handle_error,
+                            )
 
     def parse(self, response, **kwargs):
         """
@@ -34,6 +46,11 @@ class HkJobsDbSpider(scrapy.Spider):
         When parsing the first page, it also gets the total jobs and calculates the last page.
         Then after parsing each page it sends a request to the next page.
         """
+        self.logger.info(f"Received response status: {response.status} for URL: {response.url}")
+        if response.status in self.handle_httpstatus_list:
+            self.logger.info("Handling error...")
+            self.handle_error(response)
+            return
         page = response.meta.get("page", 1)
 
         # The response is a json string which we parse into python dictionaries and arrays
@@ -67,7 +84,8 @@ class HkJobsDbSpider(scrapy.Spider):
                 },
                 meta={
                     "item": item
-                }
+                },
+                errback=self.handle_error
             )
 
         if self.total_pages is None:
@@ -90,14 +108,54 @@ class HkJobsDbSpider(scrapy.Spider):
                                      "page": page
                                  })
 
-    @staticmethod
-    def parse_detail(response):
+    def parse_detail(self, response):
         """
         This function parses the response from the job detail API request's response.
         We only need the benefits from here.
         """
+        if response.status in self.handle_httpstatus_list:
+            self.logger.info(f"Received response status: {response.status} for URL: {response.url}")
+            self.handle_error(response)
+            return
         item = response.meta.get("item")
         dr = response.json()
         job = dr.get("data").get("jobDetail")
         item["benefits"] = ", ".join(job.get("jobDetail").get("jobRequirement").get("benefits"))
         yield item
+
+    def handle_error(self, response):
+        """
+        Handle failed requests and store the response in a different file.
+        """
+        self.logger.error(f"Request failed with status {response.status} for URL: {response.request.url}")
+        self.logger.info(response.request.body.decode('utf-8'))
+
+        error_data = {
+            'url': response.request.url,  
+            'status': response.status,
+            'body': response.text
+        }
+        file_name = 'failed_requests.json'
+        
+        self.retry(response)
+
+    def retry(self, failure):
+        """
+        Retry failed requests with a delay.
+        """
+        retry_times = failure.request.meta.get('retry_times', 0) + 1
+        if retry_times <= self.max_retries:
+            self.logger.error(f"Retrying URL: {failure.request.url} (attempt {retry_times})")
+            retry_req = failure.request.copy()
+            retry_req.dont_filter = True
+            retry_req.meta['retry_times'] = retry_times
+            retry_req.meta['download_slot'] = self.crawler.engine.downloader._get_slot_key(retry_req, None)
+            self.crawler.engine.schedule(retry_req, self)
+        else:
+            self.logger.error(f"Giving up on URL: {failure.request.url} after {retry_times} attempts")
+            try:
+                with open(file_name, 'a') as file:
+                    file.write(json.dumps(error_data) + "\n")
+                    file.flush()  
+            except Exception as e:
+                self.logger.error(f"Failed to write to {file_name}: {e}")

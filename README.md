@@ -4,13 +4,19 @@ The scraper uses python with the scrapy library.
 
 ## Installation
 ```sh
-pip insall scrapy
+pip install scrapy
 ```
 
 # Usage
 ```sh
 scrapy runspider hkjobsdb.py -O hkjobsdb.csv 
 ```
+If you want to log to a file instead of the console 
+
+```sh
+scrapy runspider hkjobsdb.py -O hkjobsdb.csv --logfile logs/log.txt
+```
+
 
 I found that the website uses an API request. So I copied the API request to get the data.
 
